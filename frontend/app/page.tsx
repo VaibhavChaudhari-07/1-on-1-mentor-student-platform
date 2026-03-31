@@ -1,47 +1,26 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import Auth from '@/components/Auth'
-import Dashboard from '@/components/Dashboard'
-import { supabase } from '@/lib/supabase'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks/useAuth'
 
 export default function Home() {
-  const [user, setUser] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const { user, loading } = useAuth()
+  const router = useRouter()
 
   useEffect(() => {
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setUser(session?.user ?? null)
-      setLoading(false)
-    }
-
-    getSession()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user ?? null)
+    if (!loading) {
+      if (user) {
+        router.push('/dashboard')
+      } else {
+        router.push('/login')
       }
-    )
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
-      </div>
-    )
-  }
+    }
+  }, [user, loading, router])
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {!user ? (
-        <Auth onAuth={setUser} />
-      ) : (
-        <Dashboard user={user} />
-      )}
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-xl">Redirecting...</div>
     </div>
   )
 }

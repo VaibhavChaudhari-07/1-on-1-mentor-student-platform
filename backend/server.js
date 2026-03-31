@@ -3,7 +3,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { createClient } = require('@supabase/supabase-js');
+const mongoose = require('mongoose');
 
 dotenv.config();
 
@@ -16,105 +16,23 @@ const io = socketIo(server, {
   }
 });
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 app.use(cors());
 app.use(express.json());
 
-// Middleware to verify JWT
-const verifyToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token provided' });
-
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return res.status(401).json({ error: 'Invalid token' });
-
-  req.user = user;
-  next();
-};
-
 // Routes
+const authRoutes = require('./routes/auth');
+const sessionRoutes = require('./routes/sessions');
+
+app.use('/api/auth', authRoutes);
+app.use('/api/sessions', sessionRoutes);
+
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK' });
-});
-
-// Create session (mentor only)
-app.post('/api/sessions', verifyToken, async (req, res) => {
-  const { user } = req;
-  const { title } = req.body;
-
-  // Check if user is mentor
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (profile?.role !== 'mentor') {
-    return res.status(403).json({ error: 'Only mentors can create sessions' });
-  }
-
-  const sessionId = Math.random().toString(36).substring(2, 15);
-  const { data, error } = await supabase
-    .from('sessions')
-    .insert({
-      id: sessionId,
-      mentor_id: user.id,
-      title,
-      status: 'waiting'
-    });
-
-  if (error) return res.status(500).json({ error: error.message });
-
-  res.json({ sessionId });
-});
-
-// Get session info
-app.get('/api/sessions/:id', verifyToken, async (req, res) => {
-  const { id } = req.params;
-  const { data, error } = await supabase
-    .from('sessions')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (error) return res.status(404).json({ error: 'Session not found' });
-
-  res.json(data);
-});
-
-// Join session
-app.post('/api/sessions/:id/join', verifyToken, async (req, res) => {
-  const { id } = req.params;
-  const { user } = req;
-
-  const { data: session } = await supabase
-    .from('sessions')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (!session) return res.status(404).json({ error: 'Session not found' });
-  if (session.status !== 'waiting') return res.status(400).json({ error: 'Session not available' });
-
-  // Check if user is student
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (profile?.role !== 'student') {
-    return res.status(403).json({ error: 'Only students can join sessions' });
-  }
-
-  // Update session
-  await supabase
-    .from('sessions')
-    .update({ student_id: user.id, status: 'active' })
-    .eq('id', id);
-
-  res.json({ success: true });
+  res.json({ status: 'OK', mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
 });
 
 // Socket.io handling

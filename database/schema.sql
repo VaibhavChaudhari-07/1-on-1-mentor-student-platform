@@ -10,13 +10,21 @@ CREATE TABLE profiles (
 
 -- Sessions table
 CREATE TABLE sessions (
-  id TEXT PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   mentor_id UUID REFERENCES auth.users(id) NOT NULL,
   student_id UUID REFERENCES auth.users(id),
-  title TEXT NOT NULL,
-  status TEXT CHECK (status IN ('waiting', 'active', 'ended')) DEFAULT 'waiting',
+  status TEXT CHECK (status IN ('active', 'ended')) DEFAULT 'active',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  ended_at TIMESTAMP WITH TIME ZONE
+  CONSTRAINT max_two_users CHECK (student_id IS NOT NULL OR mentor_id IS NOT NULL)
+);
+
+-- Messages table
+CREATE TABLE messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id UUID REFERENCES sessions(id) ON DELETE CASCADE NOT NULL,
+  sender_id UUID REFERENCES auth.users(id) NOT NULL,
+  content TEXT NOT NULL,
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Enable RLS on profiles
@@ -47,3 +55,25 @@ CREATE POLICY "Mentors can create sessions" ON sessions
 
 CREATE POLICY "Mentors can update their sessions" ON sessions
   FOR UPDATE USING (auth.uid() = mentor_id);
+
+-- Enable RLS on messages
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+-- Policies for messages
+CREATE POLICY "Users can view messages in their sessions" ON messages
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM sessions
+      WHERE sessions.id = messages.session_id
+      AND (sessions.mentor_id = auth.uid() OR sessions.student_id = auth.uid())
+    )
+  );
+
+CREATE POLICY "Users can insert messages in their sessions" ON messages
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM sessions
+      WHERE sessions.id = messages.session_id
+      AND (sessions.mentor_id = auth.uid() OR sessions.student_id = auth.uid())
+    )
+  );

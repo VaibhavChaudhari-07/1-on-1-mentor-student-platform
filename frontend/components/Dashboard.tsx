@@ -15,25 +15,19 @@ export default function Dashboard({ user }: DashboardProps) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    const getProfile = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-      setRole(data?.role)
-    }
-    getProfile()
+    // Role is now directly in user object
+    setRole(user.role)
   }, [user])
 
   const createSession = async () => {
     setLoading(true)
     try {
+      const token = localStorage.getItem('auth_token')
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/sessions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ title: 'Mentoring Session' }),
       })
@@ -49,10 +43,11 @@ export default function Dashboard({ user }: DashboardProps) {
   const joinSession = async () => {
     setLoading(true)
     try {
+      const token = localStorage.getItem('auth_token')
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/sessions/${joinSessionId}/join`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          'Authorization': `Bearer ${token}`,
         },
       })
       if (response.ok) {
@@ -103,7 +98,10 @@ export default function Dashboard({ user }: DashboardProps) {
           </div>
         )}
         <button
-          onClick={() => supabase.auth.signOut()}
+          onClick={() => {
+            localStorage.removeItem('auth_token')
+            window.location.reload()
+          }}
           className="w-full mt-4 bg-red-500 text-white p-2 rounded hover:bg-red-600"
         >
           Sign Out
