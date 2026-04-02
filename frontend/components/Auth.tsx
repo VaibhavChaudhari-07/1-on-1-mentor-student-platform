@@ -10,22 +10,6 @@ interface AuthProps {
 export default function Auth({ onAuth }: AuthProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<'mentor' | 'student'>('student')
-  const [isSignUp, setIsSignUp] = useState(false)
-  const [loading, setLoading] = useState(false)
-
-'use client'
-
-import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
-
-interface AuthProps {
-  onAuth: (user: any) => void
-}
-
-export default function Auth({ onAuth }: AuthProps) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [role, setRole] = useState<'mentor' | 'student'>('student')
   const [isSignUp, setIsSignUp] = useState(false)

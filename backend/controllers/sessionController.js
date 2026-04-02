@@ -1,6 +1,10 @@
 const Session = require('../models/Session');
 
 class SessionController {
+  constructor(io) {
+    this.io = io;
+  }
+
   // Create session (mentor only)
   async createSession(req, res) {
     try {
@@ -148,6 +152,15 @@ class SessionController {
       session.status = 'ended';
       session.ended_at = new Date();
       await session.save();
+
+      // Notify all participants in the session room
+      if (this.io) {
+        this.io.to(sessionId).emit('session-ended', {
+          sessionId,
+          endedBy: userId,
+          endedAt: session.ended_at
+        });
+      }
 
       // Populate session details
       await session.populate('mentor_id', 'name email role');

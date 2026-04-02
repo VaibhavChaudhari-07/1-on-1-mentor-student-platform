@@ -4,101 +4,92 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
+const { setupWSConnection } = require('y-websocket/bin/utils');
+const socketHandler = require('./socket/socketHandler');
 
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
+
+// Socket.io configuration
 const io = socketIo(server, {
   cors: {
     origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    methods: ["GET", "POST"]
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  transports: ['websocket', 'polling']
+});
+
+// Setup y-websocket for CRDT collaboration (separate from Socket.io)
+const wss = new (require('ws').Server)({ noServer: true });
+
+// Handle upgrade requests for y-websocket
+server.on('upgrade', (request, socket, head) => {
+  const pathname = require('url').parse(request.url).pathname;
+
+  if (pathname === '/y-websocket') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
   }
 });
 
+// Setup y-websocket connections
+wss.on('connection', (ws, req) => {
+  setupWSConnection(ws, req);
+});
+
+// Initialize Socket.io handler
+const { cleanup: cleanupSocket } = socketHandler(io);
+
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+if (process.env.MONGODB_URI) {
+  mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log('Connected to MongoDB'))
+    .catch(err => console.error('MongoDB connection error:', err));
+} else {
+  console.log('MongoDB URI not configured, running without database');
+}
 
 app.use(cors());
 app.use(express.json());
 
 // Routes
 const authRoutes = require('./routes/auth');
-const sessionRoutes = require('./routes/sessions');
+const sessionRoutes = require('./routes/sessions')(io);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/sessions', sessionRoutes);
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
+  res.json({
+    status: 'OK',
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    socketio: io ? 'active' : 'inactive',
+    ywebsocket: wss ? 'active' : 'inactive'
+  });
 });
 
-// Socket.io handling
-const sessions = new Map(); // sessionId -> { mentor: socketId, student: socketId }
-
-io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-
-  socket.on('join-session', ({ sessionId, userId, role }) => {
-    socket.join(sessionId);
-    socket.sessionId = sessionId;
-    socket.userId = userId;
-    socket.role = role;
-
-    if (!sessions.has(sessionId)) {
-      sessions.set(sessionId, { mentor: null, student: null });
-    }
-
-    const session = sessions.get(sessionId);
-    if (role === 'mentor') {
-      session.mentor = socket.id;
-    } else if (role === 'student') {
-      session.student = socket.id;
-    }
-
-    // Notify others in session
-    socket.to(sessionId).emit('user-joined', { userId, role });
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('Received SIGINT, shutting down gracefully...');
+  cleanupSocket();
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
   });
+});
 
-  // Collaborative editor
-  socket.on('editor-change', (data) => {
-    socket.to(socket.sessionId).emit('editor-change', data);
-  });
-
-  // Chat
-  socket.on('send-message', (message) => {
-    io.to(socket.sessionId).emit('receive-message', {
-      ...message,
-      userId: socket.userId,
-      role: socket.role
-    });
-  });
-
-  // WebRTC signaling
-  socket.on('offer', (data) => {
-    socket.to(socket.sessionId).emit('offer', data);
-  });
-
-  socket.on('answer', (data) => {
-    socket.to(socket.sessionId).emit('answer', data);
-  });
-
-  socket.on('ice-candidate', (data) => {
-    socket.to(socket.sessionId).emit('ice-candidate', data);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
-    if (socket.sessionId) {
-      const session = sessions.get(socket.sessionId);
-      if (session) {
-        if (session.mentor === socket.id) session.mentor = null;
-        if (session.student === socket.id) session.student = null;
-        socket.to(socket.sessionId).emit('user-left', { userId: socket.userId, role: socket.role });
-      }
-    }
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM, shutting down gracefully...');
+  cleanupSocket();
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
   });
 });
 

@@ -26,13 +26,13 @@ class AuthAPI {
     const url = `${API_BASE_URL}${endpoint}`;
     const token = this.getToken();
 
-    const headers: HeadersInit = {
+    const headers: any = {
       'Content-Type': 'application/json',
       ...options.headers,
     };
 
     if (token) {
-      headers.Authorization = `Bearer ${token}`;
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     const response = await fetch(url, {
@@ -128,13 +128,12 @@ export const supabase = {
               return { data: null, error: { message: 'Not authenticated' } };
             }
           }
-          return { data: null, error: { message: 'Table not supported' } };
         }
       })
     }),
     insert: () => ({
       // Mock implementation
-      return { data: null, error: null };
+      select: () => ({ data: null, error: null })
     })
   })
 };

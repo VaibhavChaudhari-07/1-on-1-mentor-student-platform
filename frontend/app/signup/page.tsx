@@ -25,19 +25,9 @@ export default function Signup() {
       if (error) {
         alert(error.message)
       } else if (data.user) {
-        // Create profile with role
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            role,
-          })
-
-        if (profileError) {
-          alert('Account created but profile setup failed. Please contact support.')
-        } else {
-          alert('Account created successfully! Please check your email to verify your account.')
-          router.push('/login')
+        // Profile creation is handled by the backend API
+        alert('Account created successfully! Please sign in.')
+        router.push('/login')
         }
       }
     } catch (error: any) {

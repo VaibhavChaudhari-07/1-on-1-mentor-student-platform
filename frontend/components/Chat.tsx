@@ -11,10 +11,10 @@ interface ChatProps {
 
 interface Message {
   id: string
-  text: string
+  content: string
   userId: string
   role: 'mentor' | 'student'
-  timestamp: number
+  timestamp: string
 }
 
 export default function Chat({ socket, userId, role }: ChatProps) {
@@ -23,12 +23,12 @@ export default function Chat({ socket, userId, role }: ChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    socket.on('receive-message', (message: Message) => {
+    socket.on('chat-message', (message: Message) => {
       setMessages(prev => [...prev, message])
     })
 
     return () => {
-      socket.off('receive-message')
+      socket.off('chat-message')
     }
   }, [socket])
 
@@ -39,14 +39,18 @@ export default function Chat({ socket, userId, role }: ChatProps) {
   const sendMessage = () => {
     if (input.trim()) {
       const message = {
+        content: input,
+      }
+      socket.emit('chat-message', message)
+      // Add message to local state immediately for better UX
+      const localMessage: Message = {
         id: Date.now().toString(),
-        text: input,
+        content: input,
         userId,
         role,
-        timestamp: Date.now(),
+        timestamp: new Date().toISOString(),
       }
-      socket.emit('send-message', message)
-      setMessages(prev => [...prev, message])
+      setMessages(prev => [...prev, localMessage])
       setInput('')
     }
   }
@@ -66,7 +70,7 @@ export default function Chat({ socket, userId, role }: ChatProps) {
             <span className={`font-semibold ${msg.role === 'mentor' ? 'text-blue-600' : 'text-green-600'}`}>
               {msg.role === 'mentor' ? 'Mentor' : 'Student'}:
             </span>
-            <span className="ml-2">{msg.text}</span>
+            <span className="ml-2">{msg.content}</span>
           </div>
         ))}
         <div ref={messagesEndRef} />

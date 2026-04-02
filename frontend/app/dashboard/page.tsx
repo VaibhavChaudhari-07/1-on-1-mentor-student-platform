@@ -9,7 +9,9 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
+        <div className="animate-pulse">
+          <div className="text-2xl font-semibold text-gray-700">Loading...</div>
+        </div>
       </div>
     )
   }
@@ -17,7 +19,10 @@ export default function DashboardPage() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Please log in to access the dashboard.</div>
+        <div className="text-center">
+          <div className="text-2xl font-semibold text-gray-700 mb-4">Access Denied</div>
+          <div className="text-gray-500">Please log in to access the dashboard.</div>
+        </div>
       </div>
     )
   }

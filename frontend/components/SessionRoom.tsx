@@ -1,10 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { io, Socket } from 'socket.io-client'
-import Editor from './Editor'
-import Chat from './Chat'
-import VideoCall from './VideoCall'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface SessionRoomProps {
   sessionId: string
@@ -13,45 +10,18 @@ interface SessionRoomProps {
 }
 
 export default function SessionRoom({ sessionId, user, role }: SessionRoomProps) {
-  const [socket, setSocket] = useState<Socket | null>(null)
-  const [connected, setConnected] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
-    const newSocket = io(process.env.NEXT_PUBLIC_BACKEND_URL!)
-    setSocket(newSocket)
-
-    newSocket.on('connect', () => {
-      setConnected(true)
-      newSocket.emit('join-session', { sessionId, userId: user.id, role })
-    })
-
-    newSocket.on('disconnect', () => {
-      setConnected(false)
-    })
-
-    return () => {
-      newSocket.disconnect()
-    }
-  }, [sessionId, user.id, role])
-
-  if (!connected) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Connecting...</div>
-      </div>
-    )
-  }
+    // Redirect to the new session page
+    router.replace(`/session/${sessionId}`)
+  }, [sessionId, router])
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 space-y-4">
-          <VideoCall socket={socket!} sessionId={sessionId} userId={user.id} />
-          <Editor socket={socket!} />
-        </div>
-        <div className="lg:col-span-1">
-          <Chat socket={socket!} userId={user.id} role={role} />
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <div className="text-xl text-gray-600">Loading session...</div>
       </div>
     </div>
   )
