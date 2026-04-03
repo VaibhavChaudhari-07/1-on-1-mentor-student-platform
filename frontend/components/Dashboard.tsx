@@ -88,8 +88,32 @@ export default function Dashboard({ user }: DashboardProps) {
     }
   }
 
+  const normalizeSessionId = (rawId: string) => {
+    if (!rawId) return ''
+    let id = rawId.trim()
+
+    // Accept full link and extract ID
+    const sessionSegment = id.match(/\/session\/(.+)$/)
+    if (sessionSegment && sessionSegment[1]) {
+      id = sessionSegment[1]
+    }
+
+    // Remove query/hash from URL e.g. ?foo=bar or #anchor
+    id = id.split(/[?#]/)[0]
+
+    return id
+  }
+
   const joinSession = async () => {
     setLoading(true)
+    const normalizedId = normalizeSessionId(joinSessionId)
+
+    if (!normalizedId) {
+      alert('Please enter a valid session ID or link')
+      setLoading(false)
+      return
+    }
+
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/sessions/join`, {
         method: 'POST',
@@ -97,16 +121,33 @@ export default function Dashboard({ user }: DashboardProps) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authAPI.getToken()}`,
         },
-        body: JSON.stringify({ sessionId: joinSessionId }),
+        body: JSON.stringify({ sessionId: normalizedId }),
       })
       if (response.ok) {
         const data = await response.json()
         if (data.success && data.session) {
           setSessionId(data.session.id)
           fetchUserSessions() // Refresh sessions list
+          return
         }
       } else {
         const error = await response.json()
+        if (error.error === 'You are already in this session' || error.error === 'Already in session') {
+          setSessionId(normalizedId)
+          fetchUserSessions()
+          return
+        }
+
+        if (error.error === 'Session is already full') {
+          alert('This session already has a student participant.')
+          return
+        }
+
+        if (error.error === 'Session is not active') {
+          alert('This session is not active yet. Ask mentor to start or check status.')
+          return
+        }
+
         alert(error.error || 'Failed to join session')
       }
     } catch (error) {

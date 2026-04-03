@@ -1,7 +1,10 @@
+'use client'
+
 import { useState, useEffect, useContext, createContext, ReactNode } from 'react'
 import { authAPI } from '@/lib/supabase'
 
 interface User {
+  id: string
   _id: string
   email: string
   name: string
@@ -24,7 +27,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = async () => {
     try {
       const userData = await authAPI.getCurrentUser()
-      setUser(userData)
+      if (userData) {
+        // Normalize id field so session page works with _id reference
+        const normalizedUser = {
+          ...userData,
+          _id: userData._id || userData.id || userData?.userId || null,
+          id: userData.id || userData._id || null
+        }
+        setUser(normalizedUser as any)
+      } else {
+        setUser(null)
+      }
     } catch (error) {
       setUser(null)
       authAPI.logout()

@@ -3,31 +3,58 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { authAPI } from '@/lib/supabase'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/login`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+        }
+      )
 
-      if (error) {
-        alert(error.message)
-      } else {
-        router.push('/dashboard')
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(data.error || 'Login failed')
+        return
       }
-    } catch (error: any) {
-      alert(error.message)
+
+      // Set token in auth API and cookie/localStorage
+      if (data.token) {
+        authAPI.setToken(data.token)
+      }
+
+      // Store user data if provided
+      if (data.user) {
+        localStorage.setItem('user', JSON.stringify(data.user))
+      }
+
+      // Redirect based on role right after login
+      if (data.user?.role === 'mentor') {
+        router.push('/dashboard/mentor')
+      } else {
+        router.push('/dashboard/student')
+      }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during login')
+      console.error('Login error:', err)
     } finally {
       setLoading(false)
     }
@@ -48,6 +75,11 @@ export default function Login() {
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+          {error && (
+            <div className="rounded-md bg-red-50 p-4">
+              <div className="text-sm text-red-800">{error}</div>
+            </div>
+          )}
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="email" className="sr-only">

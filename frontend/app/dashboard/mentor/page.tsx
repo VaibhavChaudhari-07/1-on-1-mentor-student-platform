@@ -5,29 +5,27 @@ import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import Dashboard from '@/components/Dashboard'
 
-export default function DashboardPage() {
+export default function MentorDashboardPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!loading && user) {
-      if (user.role === 'mentor') {
-        router.push('/dashboard/mentor')
-      } else {
+    if (!loading) {
+      if (!user) {
+        router.push('/login')
+      } else if (user.role !== 'mentor') {
         router.push('/dashboard/student')
       }
     }
   }, [loading, user, router])
 
-  if (loading) {
+  if (loading || !user || user.role !== 'mentor') {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse">
-          <div className="text-2xl font-semibold text-gray-700">Loading...</div>
-        </div>
+        <div className="text-2xl font-semibold text-gray-700">Loading...</div>
       </div>
     )
   }
 
-  return null
+  return <Dashboard user={user} />
 }

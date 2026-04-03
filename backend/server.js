@@ -15,12 +15,17 @@ const server = http.createServer(app);
 // Socket.io configuration
 const io = socketIo(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: true,
     methods: ["GET", "POST"],
     credentials: true
   },
   transports: ['websocket', 'polling']
 });
+
+io.engine.on('connection_error', (err) => {
+  console.error('Socket.IO engine connection error:', err);
+});
+
 
 // Setup y-websocket for CRDT collaboration (separate from Socket.io)
 const wss = new (require('ws').Server)({ noServer: true });

@@ -8,9 +8,10 @@ interface VideoCallProps {
   sessionId: string
   userId: string
   userRole: 'mentor' | 'student'
+  participants: number
 }
 
-export default function VideoCall({ socket, sessionId, userId, userRole }: VideoCallProps) {
+export default function VideoCall({ socket, sessionId, userId, userRole, participants }: VideoCallProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
@@ -23,6 +24,8 @@ export default function VideoCall({ socket, sessionId, userId, userRole }: Video
   const [remoteUserRole, setRemoteUserRole] = useState<'mentor' | 'student' | null>(null)
   const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected' | 'failed'>('disconnected')
   const [error, setError] = useState<string | null>(null)
+  const [waitingForPeer, setWaitingForPeer] = useState(false)
+  const [canStart, setCanStart] = useState(false)
 
   // ICE servers configuration
   const iceServers = [
@@ -36,6 +39,17 @@ export default function VideoCall({ socket, sessionId, userId, userRole }: Video
     const pc = new RTCPeerConnection({
       iceServers,
     })
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit('ice-candidate', {
+          candidate: event.candidate,
+          sessionId,
+          role: userRole,
+          userId
+        })
+      }
+    }
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
@@ -112,7 +126,9 @@ export default function VideoCall({ socket, sessionId, userId, userRole }: Video
 
       socket.emit('webrtc-offer', {
         offer,
-        sessionId
+        sessionId,
+        role: userRole,
+        userId
       })
 
       console.log('Offer created and sent')
@@ -132,7 +148,9 @@ export default function VideoCall({ socket, sessionId, userId, userRole }: Video
 
       socket.emit('webrtc-answer', {
         answer,
-        sessionId
+        sessionId,
+        role: userRole,
+        userId
       })
 
       console.log('Answer created and sent')
@@ -144,6 +162,8 @@ export default function VideoCall({ socket, sessionId, userId, userRole }: Video
 
   const initializeCall = useCallback(async () => {
     try {
+      if (isInCall || connectionState === 'connected') return
+
       setError(null)
       setConnectionState('connecting')
 
@@ -155,22 +175,26 @@ export default function VideoCall({ socket, sessionId, userId, userRole }: Video
 
       // Add local tracks to peer connection
       stream.getTracks().forEach(track => {
-        if (peerConnectionRef.current) {
-          peerConnectionRef.current.addTrack(track, stream)
-        }
+        peerConnectionRef.current?.addTrack(track, stream)
       })
 
-      // If mentor, create offer. If student, wait for offer
+      // Mentor should create offer when both participants are present
       if (userRole === 'mentor') {
-        setTimeout(() => createOffer(), 1000)
+        if (participants >= 2) {
+          await createOffer()
+        } else {
+          setWaitingForPeer(true)
+        }
       }
+
+      setCanStart(true)
 
     } catch (err) {
       console.error('Error initializing call:', err)
       setConnectionState('failed')
       setError('Failed to initialize video call')
     }
-  }, [userRole, startLocalStream, createPeerConnection, createOffer])
+  }, [userRole, startLocalStream, createPeerConnection, createOffer, participants, isInCall, connectionState])
 
   const endCall = useCallback(() => {
     // Stop local stream
@@ -229,11 +253,22 @@ export default function VideoCall({ socket, sessionId, userId, userRole }: Video
       console.log('Received offer:', data)
       setRemoteUserRole(data.role)
 
-      if (!peerConnectionRef.current) {
-        await initializeCall()
-      }
+      try {
+        if (!peerConnectionRef.current) {
+          const stream = await startLocalStream()
+          peerConnectionRef.current = createPeerConnection()
+          stream.getTracks().forEach(track => {
+            peerConnectionRef.current?.addTrack(track, stream)
+          })
+        }
 
-      await createAnswer(data.offer)
+        if (!peerConnectionRef.current) return
+
+        await createAnswer(data.offer)
+      } catch (err) {
+        console.error('Error in handleOffer:', err)
+        setError('Failed to process incoming offer')
+      }
     }
 
     const handleAnswer = async (data: any) => {
@@ -271,17 +306,15 @@ export default function VideoCall({ socket, sessionId, userId, userRole }: Video
     }
   }, [socket, initializeCall, createAnswer])
 
-  // Initialize call when component mounts (only if both users are in session)
+  // Initialize call when both users are in session
   useEffect(() => {
-    // Wait a bit for both users to join before starting call
-    const timer = setTimeout(() => {
-      if (!isInCall && !peerConnectionRef.current) {
-        initializeCall()
-      }
-    }, 2000)
-
-    return () => clearTimeout(timer)
-  }, [initializeCall, isInCall])
+    if (participants >= 2 && !isInCall && !peerConnectionRef.current) {
+      setWaitingForPeer(false)
+      initializeCall()
+    } else if (participants < 2) {
+      setWaitingForPeer(true)
+    }
+  }, [participants, isInCall, initializeCall])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -375,6 +408,19 @@ export default function VideoCall({ socket, sessionId, userId, userRole }: Video
 
       {/* Control Buttons */}
       <div className="flex items-center justify-center space-x-4">
+        {waitingForPeer && (
+          <span className="text-sm text-orange-600">Waiting for peer to join...</span>
+        )}
+
+        {participants >= 2 && !isInCall && !waitingForPeer && (
+          <button
+            onClick={initializeCall}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+          >
+            ▶️ Start Call
+          </button>
+        )}
+
         <button
           onClick={toggleMute}
           disabled={!isInCall}

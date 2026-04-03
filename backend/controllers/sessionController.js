@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Session = require('../models/Session');
 
 class SessionController {
@@ -11,7 +12,7 @@ class SessionController {
       const { title } = req.body;
       const mentorId = req.user._id;
 
-      // Create new session
+      // Create new session with explicit status
       const session = new Session({
         mentor_id: mentorId,
         title: title || 'Mentoring Session',
@@ -19,21 +20,27 @@ class SessionController {
       });
 
       await session.save();
+      
+      // Verify status was saved
+      if (!session.status) {
+        session.status = 'active';
+        await session.save();
+      }
 
-      // Populate mentor details
-      await session.populate('mentor_id', 'name email role');
+      // Re-fetch to ensure data consistency
+      const savedSession = await Session.findById(session._id).populate('mentor_id', 'name email role');
 
-      const sessionLink = `/session/${session._id}`;
+      const sessionLink = `/session/${savedSession._id}`;
 
       res.status(201).json({
         success: true,
         message: 'Session created successfully',
         session: {
-          id: session._id,
-          title: session.title,
-          status: session.status,
-          mentor: session.mentor_id,
-          createdAt: session.createdAt
+          id: savedSession._id,
+          title: savedSession.title,
+          status: savedSession.status,
+          mentor: savedSession.mentor_id,
+          createdAt: savedSession.createdAt
         },
         sessionLink
       });
@@ -49,17 +56,35 @@ class SessionController {
   // Join session (student only)
   async joinSession(req, res) {
     try {
-      const { sessionId } = req.body;
+      let { sessionId } = req.body;
       const studentId = req.user._id;
 
+      if (!sessionId || typeof sessionId !== 'string') {
+        return res.status(400).json({ success: false, error: 'Session ID is required' });
+      }
+
+      sessionId = sessionId.trim()
+      const maybeId = sessionId.match(/\/session\/(.+)$/)?.[1] || sessionId
+      const normalized = maybeId.split(/[?#]/)[0]
+
+      if (!mongoose.Types.ObjectId.isValid(normalized)) {
+        return res.status(400).json({ success: false, error: 'Invalid session ID format' })
+      }
+
       // Find the session
-      const session = await Session.findById(sessionId);
+      const session = await Session.findById(normalized);
 
       if (!session) {
         return res.status(404).json({
           success: false,
           error: 'Session not found'
         });
+      }
+
+      // Ensure status defaults to active (for legacy/edge cases)
+      if (!session.status) {
+        session.status = 'active';
+        await session.save();
       }
 
       // Check if session is active
@@ -70,15 +95,26 @@ class SessionController {
         });
       }
 
-      // Check if student is already in the session
+      // If student is already in the session, return success and existing session
       if (session.student_id && session.student_id.toString() === studentId.toString()) {
-        return res.status(400).json({
-          success: false,
-          error: 'You are already in this session'
+        await session.populate('mentor_id', 'name email role');
+        await session.populate('student_id', 'name email role');
+
+        return res.json({
+          success: true,
+          message: 'Already in session',
+          session: {
+            id: session._id,
+            title: session.title,
+            status: session.status,
+            mentor: session.mentor_id,
+            student: session.student_id,
+            createdAt: session.createdAt
+          }
         });
       }
 
-      // Check if session already has a student
+      // Check if session already has a different student
       if (session.student_id) {
         return res.status(400).json({
           success: false,
@@ -224,6 +260,8 @@ class SessionController {
           status: session.status,
           mentor: session.mentor_id,
           student: session.student_id,
+          mentor_id: session.mentor_id && session.mentor_id._id ? session.mentor_id._id : session.mentor_id,
+          student_id: session.student_id && session.student_id._id ? session.student_id._id : session.student_id,
           createdAt: session.createdAt,
           endedAt: session.ended_at
         }

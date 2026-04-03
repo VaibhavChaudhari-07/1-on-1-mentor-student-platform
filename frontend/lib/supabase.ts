@@ -5,12 +5,16 @@ class AuthAPI {
 
   setToken(token: string) {
     this.token = token;
-    localStorage.setItem('auth_token', token);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('auth_token', token);
+      localStorage.setItem('token', token);
+      document.cookie = `token=${token}; path=/; samesite=lax`;
+    }
   }
 
   getToken(): string | null {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('auth_token');
+      return localStorage.getItem('auth_token') || localStorage.getItem('token');
     }
     return this.token;
   }
@@ -19,6 +23,8 @@ class AuthAPI {
     this.token = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('token');
+      document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     }
   }
 
@@ -69,7 +75,8 @@ class AuthAPI {
   }
 
   async getCurrentUser() {
-    return this.request('/api/auth/me');
+    const data = await this.request('/api/auth/me');
+    return data.user || null;
   }
 
   logout() {

@@ -5,8 +5,19 @@ import { useParams, useRouter } from 'next/navigation'
 import { io, Socket } from 'socket.io-client'
 import { useAuth } from '@/hooks/useAuth'
 import VideoCall from '@/components/VideoCall'
-import CodeEditor from '@/components/Editor'
 import ChatPanel from '@/components/ChatPanel'
+import dynamic from 'next/dynamic'
+
+// Dynamically import CodeEditor to avoid SSR issues with Monaco
+const CodeEditor = dynamic(() => import('@/components/Editor'), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-full text-gray-500">
+    <div className="text-center">
+      <div className="text-4xl mb-4">📝</div>
+      <div>Loading code editor...</div>
+    </div>
+  </div>
+})
 
 interface SessionData {
   _id: string
@@ -18,6 +29,7 @@ interface SessionData {
 
 interface User {
   _id: string
+  id?: string
   name: string
   email: string
   role: 'mentor' | 'student'
@@ -46,9 +58,20 @@ export default function SessionPage() {
   useEffect(() => {
     if (!user || !sessionId) return
 
-    const newSocket = io(process.env.NEXT_PUBLIC_BACKEND_URL!, {
-      transports: ['websocket', 'polling'],
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || `${window.location.protocol}//${window.location.hostname}:3001`
+    console.log('Socket.io connecting to', backendUrl)
+
+    const newSocket = io(backendUrl, {
+      path: '/socket.io',
+      transports: ['polling', 'websocket'],
       upgrade: true,
+      timeout: 30000,
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      withCredentials: true,
+      forceNew: true
     })
 
     socketRef.current = newSocket
@@ -59,6 +82,21 @@ export default function SessionPage() {
       console.log('Connected to server')
       setConnected(true)
       setError(null)
+    })
+
+    newSocket.on('connect_error', (error) => {
+      console.error('Socket connect_error:', error)
+      setError(`Socket connect error: ${error.message || String(error)}`)
+      setConnected(false)
+    })
+
+    newSocket.on('reconnect_attempt', (attempt) => {
+      console.log('Socket reconnect attempt', attempt)
+    })
+
+    newSocket.on('reconnect_failed', () => {
+      console.error('Socket reconnect failed')
+      setError('Socket reconnect failed after multiple attempts')
     })
 
     newSocket.on('disconnect', () => {
@@ -142,11 +180,24 @@ export default function SessionPage() {
         const sessionData = await sessionResponse.json()
         setSession(sessionData.session)
 
-        // Determine user role
+        // Determine user role from session payload (accept nested docs)
         let role: 'mentor' | 'student'
-        if (sessionData.session.mentor_id === user._id) {
+        const mentorId =
+          sessionData.session.mentor_id?.toString?.() ||
+          sessionData.session.mentor?._id?.toString?.() ||
+          sessionData.session.mentor?.id?.toString?.() ||
+          ''
+        const studentId =
+          sessionData.session.student_id?.toString?.() ||
+          sessionData.session.student?._id?.toString?.() ||
+          sessionData.session.student?.id?.toString?.() ||
+          ''
+
+        const normalizedUserId = (user._id || user.id || '').toString()
+
+        if (mentorId && normalizedUserId && mentorId === normalizedUserId) {
           role = 'mentor'
-        } else if (sessionData.session.student_id === user._id) {
+        } else if (studentId && normalizedUserId && studentId === normalizedUserId) {
           role = 'student'
         } else {
           // User is not assigned to this session yet - try to join as student
@@ -199,6 +250,9 @@ export default function SessionPage() {
           userId: user._id,
           role
         })
+
+        // Switch to the session interface after successful join setup
+        setLoading(false)
 
       } catch (err) {
         console.error('Error loading session:', err)
@@ -258,10 +312,21 @@ export default function SessionPage() {
     )
   }
 
-  // Not authenticated
-  if (!user) {
+  // Not authenticated (or auth failed)
+  if (!authLoading && !user) {
     router.push('/login')
     return null
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="text-xl text-gray-600">Joining session...</div>
+        </div>
+      </div>
+    )
   }
 
   // Main session interface
@@ -332,12 +397,13 @@ export default function SessionPage() {
 
           {/* Video Call Section */}
           <div className="mt-4">
-            {socket && userRole && participants === 2 && (
+            {socket && userRole && (
               <VideoCall
                 socket={socket}
                 sessionId={sessionId}
                 userId={user._id}
                 userRole={userRole}
+                participants={participants}
               />
             )}
             {participants === 1 && (
