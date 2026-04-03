@@ -1,158 +1,149 @@
 # Mentor-Student Platform
 
-A production-ready 1-on-1 mentor-student platform with real-time collaboration, chat, and video calling.
+A complete 1-on-1 mentor-student platform with real-time collaboration, chat, and video calling.
 
-## Features
+## 🚀 Overview
 
-- **Authentication**: Role-based auth (mentor/student) using Supabase
-- **Session Management**: Mentors create sessions, students join via link
-- **Real-time Editor**: Collaborative coding with Monaco Editor
-- **Chat System**: Real-time messaging between mentor and student
-- **Video Calling**: 1-on-1 video calls using WebRTC
-- **Only 2 users per session**: Enforced mentor-student pairing
+This repository contains a full-stack application for live mentoring sessions. A mentor creates a session and a student joins by link. Both users share:
 
-## Tech Stack
+- 1-on-1 video call (WebRTC)
+- Live collaborative code editor (Monaco + Yjs + y-websocket)
+- Socket.io chat
+- Run code output (JS runtime sandbox in the browser)
+
+## 🧩 Tech Stack
 
 ### Frontend
 - Next.js 14 (App Router)
+- React + functional components
 - TypeScript
 - Tailwind CSS
-- Monaco Editor
-- Socket.io Client
+- `@monaco-editor/react` (code editor)
+- `yjs`, `y-websocket`, `y-monaco` (CRDT real-time sync)
+- `socket.io-client` (chat + signaling)
+- `next/dynamic` for SSR-safe Monaco loading
 
 ### Backend
 - Node.js + Express
-- Socket.io (real-time communication)
-- MongoDB with Mongoose
-- JWT Authentication
-- WebRTC signaling
+- `socket.io` (real-time events and WebRTC signaling)
+- `ws` + `y-websocket` (CRDT document sync server)
+- MongoDB + Mongoose (user/session data)
+- JSON Web Tokens (JWT) for auth
+- Middleware for protected routes
 
 ### Database
-- MongoDB (local or MongoDB Atlas)
+- MongoDB (local or Atlas)
 
-## Authentication
+## 📁 Repo Structure
 
-The platform uses JWT-based authentication with role-based access control.
+- `/frontend` - Next.js app
+- `/backend` - Express API + Socket.io + y-websocket server
+- `/backend/routes` - API route handlers
+- `/backend/controllers` - app logic for sessions and auth
+- `/backend/socket` - Socket.io event handlers
 
-### Setup
+## ⚙️ Prerequisites
 
-1. Set JWT secret in backend `.env`
-2. MongoDB connection for user storage
-3. Run the MongoDB schema script
+- Node.js v18+ installed
+- npm or yarn
+- MongoDB running locally or Atlas URI
 
-### Features
+## 🔧 Setup
 
-- **Signup**: Users select role (mentor/student) during registration
-- **Login**: Standard email/password authentication
-- **Protected Routes**: Dashboard requires authentication
-- **Session Persistence**: JWT tokens stored in localStorage
-- **Middleware**: Server-side route protection
+### 1. Backend
 
-### Pages
+1. Copy `.env.example` to `.env` inside `/backend`
+2. Set these values:
+   - `PORT=3001`
+   - `MONGODB_URI=your-mongodb-uri`
+   - `JWT_SECRET=your_jwt_secret`
+3. Install deps:
+   - `cd backend && npm install`
+4. Start server:
+   - `npm run dev`
 
-- `/login` - Login page
-- `/signup` - Signup with role selection
-- `/dashboard` - Protected dashboard (redirects based on role)
+### 2. Frontend
 
-### Auth Flow
+1. Copy `.env.example` to `.env.local` inside `/frontend`
+2. Set:
+   - `NEXT_PUBLIC_BACKEND_URL=http://localhost:3001`
+3. Install deps:
+   - `cd frontend && npm install`
+4. Start frontend:
+   - `npm run dev`
 
-1. Unauthenticated users redirected to `/login`
-2. Signup creates user account and profile with role
-3. Login persists session and redirects to `/dashboard`
-4. Authenticated users cannot access login/signup pages
+### 3. Open app
 
-## Deployment
+- Visit `http://localhost:3000`
+- Signup as mentor or student (students can join existing sessions only)
+- Mentor creates a session and shares URL
+- Student joins, then both can collaborate
 
-### Backend
-Deploy to services like Heroku, Railway, or Vercel Functions.
+## 📦 Useful npm scripts
 
 ### Frontend
-Deploy to Vercel or Netlify.
+- `npm run dev` – start Next.js dev server
+- `npm run build` – production build
+- `npm run lint` – lint code
 
-### Database
-MongoDB Atlas for cloud deployment or self-hosted MongoDB.
+### Backend
+- `npm run dev` – start Express + Socket.io + y-websocket in dev mode
+- `npm run start` – production start
 
-## Architecture
+## 🛠️ Features
 
-- **Frontend**: React components for UI, Socket.io for real-time features
-- **Backend**: Express server with Socket.io for WebSocket connections and WebRTC signaling
-- **Database**: MongoDB for user, session, and message data
-- **Authentication**: JWT-based auth with role management
-- **Real-time**: Socket.io handles editor sync, chat, and WebRTC signaling
+- Role-based auth (mentor/student)
+- Mentors create sessions, students join by session ID URL
+- Socket.io 1-on-1 Chat
+- Video call with WebRTC (offer/answer + ICE via socket events)
+- Collaborative editor using Monaco + Yjs (document shared via y-websocket)
+- Run JS code in browser, output console logs
+- Mentor can end sessions
 
-## Database Schema
+## 🧹 .gitignore check
 
-### Collections
+Verified and good:
+- Node modules, build artifacts (`/node_modules`, `.next`, `dist`, `build`)
+- Env files (`.env*`)
+- OS/editor temp files (`.DS_Store`, `.vscode`, etc.)
+- Log and cache files
 
-#### Users
-```javascript
-{
-  _id: ObjectId,
-  email: String (unique),
-  password: String (hashed),
-  role: "mentor" | "student",
-  name: String,
-  createdAt: Date,
-  updatedAt: Date
-}
-```
+No changes required unless new generated paths are introduced later.
 
-#### Sessions
-```javascript
-{
-  _id: ObjectId,
-  mentor_id: ObjectId (ref to users),
-  student_id: ObjectId (ref to users, optional),
-  status: "active" | "ended",
-  title: String,
-  createdAt: Date,
-  updatedAt: Date,
-  ended_at: Date
-}
-```
+## 🧾 API Endpoints
 
-#### Messages
-```javascript
-{
-  _id: ObjectId,
-  session_id: ObjectId (ref to sessions),
-  sender_id: ObjectId (ref to users),
-  content: String,
-  message_type: "text" | "code" | "system",
-  timestamp: Date
-}
-```
-
-## API Endpoints
-
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login user
-- `GET /api/auth/me` - Get current user
+### Auth
+- `POST /api/auth/register` - register new user
+- `POST /api/auth/login` - login and get JWT
+- `GET /api/auth/me` - get current user
 
 ### Sessions
-- `POST /api/sessions` - Create session (mentor only)
-- `GET /api/sessions/:id` - Get session details
-- `POST /api/sessions/:id/join` - Join session (student only)
-- `POST /api/sessions/:id/end` - End session (mentor only)
+- `POST /api/sessions` - mentor creates session
+- `GET /api/sessions/:id` - get session details
+- `POST /api/sessions/join` - student joins session
+- `POST /api/sessions/end` - mentor ends session
 
-## Security
+## 🧹 Notes on version-specific implementation
 
-- JWT authentication via Supabase
-- Row Level Security (RLS) on database tables
-- CORS configured for frontend origin
-- Input validation on API endpoints
+- `y-websocket` server is mounted on backend as `/y-websocket`
+- Frontend `Editor` connects to this path using `NEXT_PUBLIC_BACKEND_URL` via ws/wss and binds Monaco text to shared `Y.Doc`
+- `page.tsx` handles session loading, role resolution, and Socket.io connection
+- `VideoCall` component uses socket for WebRTC signaling and media controls
 
-## Development
+## 🔍 Troubleshooting
 
-- Use `npm run dev` for development
-- Build with `npm run build`
-- Lint with `npm run lint`
+- Ensure MongoDB URI is reachable
+- Ensure backend and frontend base URLs match
+- Check browser console for socket errors
+- Check backend logs for `y-websocket` connections
 
-## Contributing
+## ✅ Contribution
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+1. Fork
+2. New branch
+3. Implement + test
+4. PR with description
+
+---
+
+*This README is now aligned with the repository's actual code and architecture.*
